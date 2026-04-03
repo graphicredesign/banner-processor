@@ -163,6 +163,31 @@ app.use('/preview/:projectId', (req, res, next) => {
   const preview = activePreviews.get(projectId)
 
   if (!preview || Date.now() > preview.expiresAt) {
+    return res.status(404).send('Preview expired')
+  }
+
+  // Try serving from root, then from size subfolders
+  const rootStatic = express.static(preview.dir)
+  rootStatic(req, res, async () => {
+    try {
+      const files = await fs.readdir(preview.dir)
+      const sizeFolder = files.find(f => f.match(/^\d+x\d+$/))
+      if (sizeFolder) {
+        express.static(path.join(preview.dir, sizeFolder))(req, res, next)
+      } else {
+        next()
+      }
+    } catch {
+      next()
+    }
+  })
+})
+
+app.get('/preview/:projectId', (req, res) => {
+  const { projectId } = req.params
+  const preview = activePreviews.get(projectId)
+
+  if (!preview || Date.now() > preview.expiresAt) {
     return res.status(404).send(`
       <html><body style="font-family:sans-serif;text-align:center;padding:60px">
         <h2>Preview Expired</h2>
@@ -171,25 +196,18 @@ app.use('/preview/:projectId', (req, res, next) => {
     `)
   }
 
-  express.static(preview.dir)(req, res, next)
-})
-
-app.get('/preview/:projectId', (req, res, next) => {
-  const { projectId } = req.params
-  const preview = activePreviews.get(projectId)
-
-  if (!preview || Date.now() > preview.expiresAt) {
-    return res.status(404).send('Preview expired')
-  }
-
-  // Find first size folder and serve its index.html
-  fs.readdir(preview.dir).then(files => {
+  // Find index.html — check root first, then size subfolders
+  fs.readdir(preview.dir).then(async files => {
+    // Check if index.html is at root
+    if (files.includes('index.html')) {
+      return res.sendFile(path.join(preview.dir, 'index.html'))
+    }
+    // Look inside size subfolders like 480x320/
     const sizeFolder = files.find(f => f.match(/^\d+x\d+$/))
     if (sizeFolder) {
-      res.sendFile(path.join(preview.dir, sizeFolder, 'index.html'))
-    } else {
-      res.sendFile(path.join(preview.dir, 'index.html'))
+      return res.sendFile(path.join(preview.dir, sizeFolder, 'index.html'))
     }
+    res.status(404).send('No index.html found in preview')
   }).catch(() => res.status(500).send('Error loading preview'))
 })
 
