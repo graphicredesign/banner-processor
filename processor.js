@@ -150,6 +150,8 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
   adRoot.attr('style', style)
 
   const bodyMarkup = $.html(adRoot)
+// Wrap ad root in click tag anchor
+const wrappedMarkup = `<a href="%%CLICK_URL_UNESC%%%%DEST_URL%%" target="_blank" style="display:block;width:${meta.width}px;height:${meta.height}px;overflow:hidden;text-decoration:none;">\n${bodyMarkup}\n</a>`
   const bodyClassColor = fixedCss.match(/\.body\s*\{[^}]*color:\s*([^;}\n]+)/s)
   const adRootColor = bodyClassColor ? bodyClassColor[1].trim() : '#fff'
   const bodyClassFont = fixedCss.match(/\.body\s*\{[^}]*font-family:\s*([^;}\n]+)/s)
@@ -177,7 +179,7 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
     `${externalScriptTags}\n` +
     `</head>\n` +
     `<body style="margin:0;padding:0;overflow:hidden;">\n` +
-    `${bodyMarkup}\n` +
+    `${wrappedMarkup}\n` +
     `${inlineScriptTags.join('\n')}\n` +
     `</body>\n</html>`
 
