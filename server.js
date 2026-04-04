@@ -30,6 +30,27 @@ setInterval(async () => {
   }
 }, 5 * 60 * 1000)
 
+// Clean up output ZIPs older than 30 days
+setInterval(async () => {
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: oldProjects } = await supabase
+      .from('projects')
+      .select('id, output_zip_path, user_id')
+      .eq('status', 'complete')
+      .lt('created_at', thirtyDaysAgo)
+      .not('output_zip_path', 'is', null)
+
+    if (oldProjects && oldProjects.length > 0) {
+      const paths = oldProjects.map(p => p.output_zip_path)
+      await supabase.storage.from('output-zips').remove(paths)
+      console.log(`Deleted ${paths.length} expired output ZIPs`)
+    }
+  } catch (err) {
+    console.error('Output ZIP cleanup error:', err)
+  }
+}, 24 * 60 * 60 * 1000)
+
 // Health check
 app.get('/', (req, res) => {
   res.json({ status: 'Web to Banner Processor running' })
@@ -93,6 +114,9 @@ app.post('/process', verifySecret, async (req, res) => {
       .eq('id', projectId)
 
     await fs.remove(tmpDir)
+
+    // Delete input ZIP from Supabase storage after processing
+    await supabase.storage.from('input-zips').remove([filePath])
 
   } catch (err) {
     console.error('Processing error:', err)

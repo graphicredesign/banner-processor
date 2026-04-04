@@ -7,15 +7,6 @@ import axios from 'axios'
 import archiver from 'archiver'
 import sharp from 'sharp'
 
-const PAGE_MAP = {
-  '480x320/ad.html': { width: 480, height: 320 },
-  '300x250/ad.html': { width: 300, height: 250 },
-  '728x90/ad.html':  { width: 728, height: 90  },
-  '160x600/ad.html': { width: 160, height: 600 },
-  '320x50/ad.html':  { width: 320, height: 50  },
-  '300x600/ad.html': { width: 300, height: 600 }
-}
-
 const BLOCKED_SCRIPTS = ['webflow.js', 'webflow.com']
 
 async function unzipWebflow(zipPath, extractPath) {
@@ -30,6 +21,32 @@ async function loadAllCss(extractedPath) {
   const parts = []
   for (const f of files) parts.push(await fs.readFile(f, 'utf8'))
   return parts.join('\n')
+}
+
+function detectBannerSize($, adRoot, htmlPath) {
+  // 1. Try reading from inline style of [data-banner-root]
+  const style = adRoot.attr('style') || ''
+  const wMatch = style.match(/width:\s*(\d+)px/)
+  const hMatch = style.match(/height:\s*(\d+)px/)
+  if (wMatch && hMatch) {
+    return { width: parseInt(wMatch[1]), height: parseInt(hMatch[1]) }
+  }
+
+  // 2. Try reading width/height attributes directly
+  const wAttr = adRoot.attr('width')
+  const hAttr = adRoot.attr('height')
+  if (wAttr && hAttr) {
+    return { width: parseInt(wAttr), height: parseInt(hAttr) }
+  }
+
+  // 3. Try folder name pattern e.g. 300x250/ad.html
+  const folderMatch = htmlPath.match(/(\d+)x(\d+)[\/\\]/)
+  if (folderMatch) {
+    return { width: parseInt(folderMatch[1]), height: parseInt(folderMatch[2]) }
+  }
+
+  // 4. Could not detect — return null so server can prompt user
+  return null
 }
 
 function collectSlots($, adRoot) {
@@ -89,16 +106,22 @@ async function bundleExternalScripts($, outDir) {
   return bundled
 }
 
-async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
-  const baseName = path.relative(extractedPath, htmlPath).replace(/\\/g, '/')
-  const meta = PAGE_MAP[baseName]
-  if (!meta) return null
-  const sizeKey = `${meta.width}x${meta.height}`
-
+async function processPage(htmlPath, allCss, extractedPath, templatesPath, sizeOverride) {
   const $ = cheerio.load(await fs.readFile(htmlPath, 'utf8'))
-  const adRoot = $('.ad-root').first()
+
+  // Find banner root — support both data-banner-root and legacy .ad-root
+  let adRoot = $('[data-banner-root]').first()
+  if (!adRoot.length) adRoot = $('.ad-root').first()
   if (!adRoot.length) return null
 
+  // Detect size
+  const meta = sizeOverride || detectBannerSize($, adRoot, htmlPath)
+  if (!meta) {
+    console.warn(`Could not detect size for ${htmlPath} — skipping`)
+    return { undetected: true, htmlPath }
+  }
+
+  const sizeKey = `${meta.width}x${meta.height}`
   const outDir = path.join(templatesPath, sizeKey)
   await fs.ensureDir(outDir)
 
@@ -149,7 +172,7 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
   if (bgSlot) style += `background-color:{{${bgSlot}}};`
   adRoot.attr('style', style)
 
-  // Inject click tag into existing clicktag-button or add overlay
+  // Inject click tag
   const clicktagBtn = adRoot.find('.clicktag-button')
   if (clicktagBtn.length) {
     clicktagBtn.attr('href', "javascript:void(window.open(window.clickTag||'%%CLICK_URL_UNESC%%%%DEST_URL%%','_blank'))")
@@ -166,9 +189,9 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
 
   const finalCss = fixedCss +
     '\n* { box-sizing: border-box; }\nbody { margin:0; padding:0; overflow:hidden; }\n' +
-    `\n.ad-root { color: ${adRootColor}; font-family: ${adRootFont}; }\n` +
+    `\n[data-banner-root], .ad-root { color: ${adRootColor}; font-family: ${adRootFont}; }\n` +
     '\n.clicktag-button { pointer-events: all !important; cursor: pointer !important; }\n' +
-    '\n.ad-root > *:not(.clicktag-button) { pointer-events: none; }\n'
+    '\n[data-banner-root] > *:not(.clicktag-button), .ad-root > *:not(.clicktag-button) { pointer-events: none; }\n'
 
   const inlineScriptTags = []
   $('script:not([src])').each((_, el) => {
@@ -200,7 +223,7 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
     generated: new Date().toISOString()
   }, { spaces: 2 })
 
-  return { sizeKey, outDir, slots }
+  return { sizeKey, outDir, slots, width: meta.width, height: meta.height }
 }
 
 async function compressImages(dir) {
@@ -238,7 +261,7 @@ async function zipDirectory(sourceDir, zipPath) {
   })
 }
 
-export async function processWebflowZip(zipPath, tmpDir) {
+export async function processWebflowZip(zipPath, tmpDir, sizeOverrides) {
   const extractedPath = path.join(tmpDir, 'extracted')
   const templatesPath = path.join(tmpDir, 'templates')
   const outputPath    = path.join(tmpDir, 'output.zip')
@@ -247,15 +270,35 @@ export async function processWebflowZip(zipPath, tmpDir) {
 
   const allCss = await loadAllCss(extractedPath)
   const all = await glob('**/*.html', { cwd: extractedPath, absolute: true })
-  const pages = all.filter(f => {
-    const rel = path.relative(extractedPath, f).replace(/\\/g, '/')
-    return PAGE_MAP[rel]
-  })
 
-  if (!pages.length) throw new Error('No banner pages found in ZIP')
+  // Find all HTML files that have [data-banner-root] or .ad-root
+  const pages = []
+  for (const f of all) {
+    const html = await fs.readFile(f, 'utf8')
+    if (html.includes('data-banner-root') || html.includes('class="ad-root') || html.includes('ad-root')) {
+      pages.push(f)
+    }
+  }
+
+  if (!pages.length) throw new Error('No banner pages found. Make sure your banner container has the data-banner-root attribute.')
+
+  const undetected = []
+  const processed = []
 
   for (const p of pages) {
-    await processPage(p, allCss, extractedPath, templatesPath)
+    const rel = path.relative(extractedPath, p).replace(/\\/g, '/')
+    const sizeOverride = sizeOverrides?.[rel] || null
+    const result = await processPage(p, allCss, extractedPath, templatesPath, sizeOverride)
+    if (!result) continue
+    if (result.undetected) {
+      undetected.push({ path: rel, htmlPath: result.htmlPath })
+    } else {
+      processed.push(result)
+    }
+  }
+
+  if (!processed.length && undetected.length) {
+    throw new Error(`Banner sizes could not be detected for: ${undetected.map(u => u.path).join(', ')}. Please re-upload with size overrides.`)
   }
 
   // Compress images before zipping
@@ -269,5 +312,5 @@ export async function processWebflowZip(zipPath, tmpDir) {
   const sizeKB = stats.size / 1024
   const oversized = sizeKB > 600
 
-  return { outputPath, oversized, sizeKB: Math.round(sizeKB) }
+  return { outputPath, oversized, sizeKB: Math.round(sizeKB), undetected, processed }
 }
