@@ -172,7 +172,9 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
 
   const finalCss = fixedCss +
     '\n* { box-sizing: border-box; }\nbody { margin:0; padding:0; overflow:hidden; }\n' +
-    `\n.ad-root { color: ${adRootColor}; font-family: ${adRootFont}; }\n`
+    `\n.ad-root { color: ${adRootColor}; font-family: ${adRootFont}; }\n` +
+    '\n.ad-root *:not(.clicktag-button) { pointer-events: none; }\n' +
+    '\n.clicktag-button { pointer-events: all !important; }\n'
 
   const inlineScriptTags = []
   $('script:not([src])').each((_, el) => {
