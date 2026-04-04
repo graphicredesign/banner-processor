@@ -162,8 +162,8 @@ app.post('/preview', verifySecret, async (req, res) => {
   }
 })
 
-// Serve preview files
-app.use('/preview/:projectId', (req, res, next) => {
+// Serve preview files — serve everything from the size subfolder
+app.use('/preview/:projectId', async (req, res, next) => {
   const { projectId } = req.params
   const preview = activePreviews.get(projectId)
 
@@ -171,24 +171,17 @@ app.use('/preview/:projectId', (req, res, next) => {
     return res.status(404).send('Preview expired')
   }
 
-  // Try serving from root, then from size subfolders
-  const rootStatic = express.static(preview.dir)
-  rootStatic(req, res, async () => {
-    try {
-      const files = await fs.readdir(preview.dir)
-      const sizeFolder = files.find(f => f.match(/^\d+x\d+$/))
-      if (sizeFolder) {
-        express.static(path.join(preview.dir, sizeFolder))(req, res, next)
-      } else {
-        next()
-      }
-    } catch {
-      next()
-    }
-  })
+  try {
+    const files = await fs.readdir(preview.dir)
+    const sizeFolder = files.find(f => f.match(/^\d+x\d+$/))
+    const serveDir = sizeFolder ? path.join(preview.dir, sizeFolder) : preview.dir
+    express.static(serveDir)(req, res, next)
+  } catch {
+    next()
+  }
 })
 
-app.get('/preview/:projectId', (req, res) => {
+app.get('/preview/:projectId', async (req, res) => {
   const { projectId } = req.params
   const preview = activePreviews.get(projectId)
 
@@ -200,6 +193,16 @@ app.get('/preview/:projectId', (req, res) => {
       </body></html>
     `)
   }
+
+  try {
+    const files = await fs.readdir(preview.dir)
+    const sizeFolder = files.find(f => f.match(/^\d+x\d+$/))
+    const serveDir = sizeFolder ? path.join(preview.dir, sizeFolder) : preview.dir
+    res.sendFile(path.join(serveDir, 'index.html'))
+  } catch {
+    res.status(500).send('Error loading preview')
+  }
+})
 
   // Find index.html — check root first, then size subfolders
   fs.readdir(preview.dir).then(async files => {
