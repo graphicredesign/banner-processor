@@ -5,6 +5,7 @@ import * as cheerio from 'cheerio'
 import { glob } from 'glob'
 import axios from 'axios'
 import archiver from 'archiver'
+import sharp from 'sharp'
 
 const PAGE_MAP = {
   '480x320/ad.html': { width: 480, height: 320 },
@@ -191,6 +192,28 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
   return { sizeKey, outDir, slots }
 }
 
+async function compressImages(dir) {
+  const images = await glob('**/*.{jpg,jpeg,png}', { cwd: dir, absolute: true })
+  for (const imgPath of images) {
+    try {
+      const ext = path.extname(imgPath).toLowerCase()
+      const tmp = imgPath + '.tmp'
+      if (ext === '.png') {
+        await sharp(imgPath)
+          .png({ compressionLevel: 9, quality: 80 })
+          .toFile(tmp)
+      } else {
+        await sharp(imgPath)
+          .jpeg({ quality: 70, progressive: true })
+          .toFile(tmp)
+      }
+      await fs.move(tmp, imgPath, { overwrite: true })
+    } catch (err) {
+      console.warn(`Could not compress ${imgPath}: ${err.message}`)
+    }
+  }
+}
+
 async function zipDirectory(sourceDir, zipPath) {
   await fs.ensureDir(path.dirname(zipPath))
   return new Promise((resolve, reject) => {
@@ -224,7 +247,16 @@ export async function processWebflowZip(zipPath, tmpDir) {
     await processPage(p, allCss, extractedPath, templatesPath)
   }
 
+  // Compress images before zipping
+  await compressImages(templatesPath)
+
   // Zip all processed templates together
   await zipDirectory(templatesPath, outputPath)
-  return outputPath
+
+  // Check file size and warn if over 600KB
+  const stats = await fs.stat(outputPath)
+  const sizeKB = stats.size / 1024
+  const oversized = sizeKB > 600
+
+  return { outputPath, oversized, sizeKB: Math.round(sizeKB) }
 }

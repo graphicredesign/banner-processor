@@ -8,6 +8,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
     "archiver": "^7.0.1",
     "axios": "^1.8.4",
     "cheerio": "^1.0.0",
@@ -16,7 +17,7 @@
     "glob": "^11.0.1",
     "mime-types": "^2.1.35",
     "postcss": "^8.4.38",
-    "unzipper": "^0.12.3",
-    "@supabase/supabase-js": "^2.0.0"
+    "sharp": "^0.34.5",
+    "unzipper": "^0.12.3"
   }
 }

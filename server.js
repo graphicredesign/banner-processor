@@ -70,10 +70,10 @@ app.post('/process', verifySecret, async (req, res) => {
     const buffer = Buffer.from(await fileData.arrayBuffer())
     await fs.writeFile(zipPath, buffer)
 
-    const outputZipPath = await processWebflowZip(zipPath, tmpDir)
+    const { outputPath, oversized, sizeKB } = await processWebflowZip(zipPath, tmpDir)
 
     const outputStoragePath = `${userId}/${projectId}-output.zip`
-    const outputBuffer = await fs.readFile(outputZipPath)
+    const outputBuffer = await fs.readFile(outputPath)
 
     const { error: uploadError } = await supabase.storage
       .from('output-zips')
@@ -84,7 +84,12 @@ app.post('/process', verifySecret, async (req, res) => {
     if (uploadError) throw uploadError
 
     await supabase.from('projects')
-      .update({ status: 'complete', output_zip_path: outputStoragePath })
+      .update({
+        status: 'complete',
+        output_zip_path: outputStoragePath,
+        oversized: oversized,
+        output_size_kb: sizeKB
+      })
       .eq('id', projectId)
 
     await fs.remove(tmpDir)
