@@ -149,6 +149,21 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
   if (bgSlot) style += `background-color:{{${bgSlot}}};`
   adRoot.attr('style', style)
 
+  // Inject click tag into existing clicktag-button or add overlay
+  const clicktagBtn = adRoot.find('.clicktag-button')
+  if (clicktagBtn.length) {
+    clicktagBtn.attr('href', "javascript:void(window.open(window.clickTag||'%%CLICK_URL_UNESC%%%%DEST_URL%%','_blank'))")
+    clicktagBtn.css('position', 'absolute')
+    clicktagBtn.css('top', '0')
+    clicktagBtn.css('left', '0')
+    clicktagBtn.css('width', '100%')
+    clicktagBtn.css('height', '100%')
+    clicktagBtn.css('z-index', '9999')
+    clicktagBtn.css('cursor', 'pointer')
+  } else {
+    adRoot.append(`<div onclick="window.open(window.clickTag||'%%CLICK_URL_UNESC%%%%DEST_URL%%','_blank')" style="position:absolute;top:0;left:0;width:100%;height:100%;cursor:pointer;z-index:9999;"></div>`)
+  }
+
   const bodyMarkup = $.html(adRoot)
   const bodyClassColor = fixedCss.match(/\.body\s*\{[^}]*color:\s*([^;}\n]+)/s)
   const adRootColor = bodyClassColor ? bodyClassColor[1].trim() : '#fff'
