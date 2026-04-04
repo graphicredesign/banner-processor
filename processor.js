@@ -153,13 +153,7 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
   const clicktagBtn = adRoot.find('.clicktag-button')
   if (clicktagBtn.length) {
     clicktagBtn.attr('href', "javascript:void(window.open(window.clickTag||'%%CLICK_URL_UNESC%%%%DEST_URL%%','_blank'))")
-    clicktagBtn.css('position', 'absolute')
-    clicktagBtn.css('top', '0')
-    clicktagBtn.css('left', '0')
-    clicktagBtn.css('width', '100%')
-    clicktagBtn.css('height', '100%')
-    clicktagBtn.css('z-index', '9999')
-    clicktagBtn.css('cursor', 'pointer')
+    clicktagBtn.attr('style', 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:99999;cursor:pointer;display:block;')
   } else {
     adRoot.append(`<div onclick="window.open(window.clickTag||'%%CLICK_URL_UNESC%%%%DEST_URL%%','_blank')" style="position:absolute;top:0;left:0;width:100%;height:100%;cursor:pointer;z-index:9999;"></div>`)
   }
@@ -173,8 +167,8 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath) {
   const finalCss = fixedCss +
     '\n* { box-sizing: border-box; }\nbody { margin:0; padding:0; overflow:hidden; }\n' +
     `\n.ad-root { color: ${adRootColor}; font-family: ${adRootFont}; }\n` +
-    '\n.ad-root *:not(.clicktag-button) { pointer-events: none; }\n' +
-    '\n.clicktag-button { pointer-events: all !important; }\n'
+    '\n.clicktag-button { pointer-events: all !important; cursor: pointer !important; }\n' +
+    '\n.ad-root > *:not(.clicktag-button) { pointer-events: none; }\n'
 
   const inlineScriptTags = []
   $('script:not([src])').each((_, el) => {
