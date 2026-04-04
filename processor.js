@@ -109,9 +109,8 @@ async function bundleExternalScripts($, outDir) {
 async function processPage(htmlPath, allCss, extractedPath, templatesPath, sizeOverride) {
   const $ = cheerio.load(await fs.readFile(htmlPath, 'utf8'))
 
-  // Find banner root — support both data-banner-root and legacy .ad-root
-  let adRoot = $('[data-banner-root]').first()
-  if (!adRoot.length) adRoot = $('.ad-root').first()
+  // Find banner root
+  const adRoot = $('[data-banner-root]').first()
   if (!adRoot.length) return null
 
   // Detect size
@@ -189,9 +188,9 @@ async function processPage(htmlPath, allCss, extractedPath, templatesPath, sizeO
 
   const finalCss = fixedCss +
     '\n* { box-sizing: border-box; }\nbody { margin:0; padding:0; overflow:hidden; }\n' +
-    `\n[data-banner-root], .ad-root { color: ${adRootColor}; font-family: ${adRootFont}; }\n` +
+   `\n[data-banner-root] { color: ${adRootColor}; font-family: ${adRootFont}; }\n` +
     '\n.clicktag-button { pointer-events: all !important; cursor: pointer !important; }\n' +
-    '\n[data-banner-root] > *:not(.clicktag-button), .ad-root > *:not(.clicktag-button) { pointer-events: none; }\n'
+    '\n[data-banner-root] > *:not(.clicktag-button) { pointer-events: none; }\n'
 
   const inlineScriptTags = []
   $('script:not([src])').each((_, el) => {
@@ -275,7 +274,7 @@ export async function processWebflowZip(zipPath, tmpDir, sizeOverrides) {
   const pages = []
   for (const f of all) {
     const html = await fs.readFile(f, 'utf8')
-    if (html.includes('data-banner-root') || html.includes('class="ad-root') || html.includes('ad-root')) {
+    if (html.includes('data-banner-root')) {
       pages.push(f)
     }
   }
