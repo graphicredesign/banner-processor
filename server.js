@@ -204,20 +204,7 @@ app.get('/preview/:projectId', async (req, res) => {
   }
 })
 
-  // Find index.html — check root first, then size subfolders
-  fs.readdir(preview.dir).then(async files => {
-    // Check if index.html is at root
-    if (files.includes('index.html')) {
-      return res.sendFile(path.join(preview.dir, 'index.html'))
-    }
-    // Look inside size subfolders like 480x320/
-    const sizeFolder = files.find(f => f.match(/^\d+x\d+$/))
-    if (sizeFolder) {
-      return res.sendFile(path.join(preview.dir, sizeFolder, 'index.html'))
-    }
-    res.status(404).send('No index.html found in preview')
-  }).catch(() => res.status(500).send('Error loading preview'))
-})
+  
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
