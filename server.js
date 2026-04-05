@@ -109,7 +109,8 @@ app.post('/process', verifySecret, async (req, res) => {
         status: 'complete',
         output_zip_path: outputStoragePath,
         oversized: oversized,
-        output_size_kb: sizeKB
+        output_size_kb: sizeKB,
+        detected_sizes: processed.map(p => `${p.width}x${p.height}`)
       })
       .eq('id', projectId)
 
