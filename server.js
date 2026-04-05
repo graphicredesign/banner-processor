@@ -127,6 +127,25 @@ app.post('/process', verifySecret, async (req, res) => {
         error_message: err.message
       })
       .eq('id', projectId)
+
+    // Alert admin of processing failure
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: 'Web to Banner <noreply@webtobanner.com>',
+          to: 'support@graphicredesign.com',
+          subject: `[Alert] Processing failed — Project ${projectId}`,
+          html: `<p><strong>Project ID:</strong> ${projectId}</p><p><strong>User:</strong> ${userId}</p><p><strong>Error:</strong> ${err.message}</p><p><strong>Time:</strong> ${new Date().toISOString()}</p>`
+        })
+      })
+    } catch (alertErr) {
+      console.error('Alert email failed:', alertErr)
+    }
   }
 })
 
