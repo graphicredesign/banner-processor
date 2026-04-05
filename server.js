@@ -91,7 +91,7 @@ app.post('/process', verifySecret, async (req, res) => {
     const buffer = Buffer.from(await fileData.arrayBuffer())
     await fs.writeFile(zipPath, buffer)
 
-    const { outputPath, oversized, sizeKB, undetected } = await processWebflowZip(zipPath, tmpDir)
+    const { outputPath, oversized, sizeKB, undetected, processed } = await processWebflowZip(zipPath, tmpDir)
 
     const outputStoragePath = `${userId}/${projectId}-output.zip`
     const outputBuffer = await fs.readFile(outputPath)
